@@ -1,6 +1,8 @@
 package com.husam.storageengine.diskmanager;
 
 import com.husam.common.DatabaseConfig;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.io.RandomAccessFile;
 
 public class DiskManager {
 
+    private static final Logger LOGGER = LogManager.getLogger(DatabaseConfig.class);
     private RandomAccessFile dbFile;
     private DatabaseConfig conf = DatabaseConfig.getInstance();
 
@@ -25,7 +28,7 @@ public class DiskManager {
         try {
             dbFile = new RandomAccessFile(fileName, "rw");
         } catch (FileNotFoundException e) {
-            // TODO: log error
+            LOGGER.fatal("can't open the database file in read write mode");
             throw new RuntimeException(e);
         }
     }
@@ -34,15 +37,15 @@ public class DiskManager {
         long offset = pageId * conf.getPageSize();
         try {
             if (offset > dbFile.length()) {
-                // TODO: log error
+                LOGGER.error("can't read page with ID: ", pageId);
                 return;
             }
             dbFile.seek(offset);
             if (dbFile.read(pageData, 0, conf.getPageSize()) == -1) {
-                // TODO: log error about we couldn't read the page
+                LOGGER.error("can't read page with ID: ", pageId);
             }
         } catch (IOException e) {
-            // TODO: log error
+            LOGGER.error("can't read page with ID: ", pageId);
             throw new RuntimeException(e);
         }
 
@@ -56,7 +59,7 @@ public class DiskManager {
             // to keep disk in sync
             dbFile.getFD().sync();
         } catch (IOException e) {
-            // TODO: log error
+            LOGGER.error("can't write a page with ID: ", pageId);
             throw new RuntimeException(e);
         }
     }
