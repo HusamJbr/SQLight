@@ -28,7 +28,7 @@ public class DiskManager {
         try {
             dbFile = new RandomAccessFile(fileName, "rw");
         } catch (FileNotFoundException e) {
-            LOGGER.fatal("can't open the database file in read write mode");
+            LOGGER.fatal("can't open the database file: " + fileName + " in read write mode");
             throw new RuntimeException(e);
         }
     }
