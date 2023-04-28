@@ -1,18 +1,20 @@
 package com.husam.utils.list;
 
+import com.husam.utils.Pair;
+
 import java.util.concurrent.atomic.AtomicMarkableReference;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This is a Lock-free doubly linked list described by Paul A. Martin
  * the same algorithm is used by java ConcurrentLinkedDeque
- * I modified it a bit to be more modern
+ * I modified it a bit to be modern and implement just the needed methods
  */
 
-public class DoublyLinkedList<V> {
+public class AccessQueue<V> {
     private Node<V> headDummy, tailDummy;
 
-    public DoublyLinkedList() {
+    public AccessQueue() {
         Node<V> hd = new Node<>();
         Node<V> td = new Node<>();
         hd.setPrev(null);
@@ -23,44 +25,30 @@ public class DoublyLinkedList<V> {
         tailDummy = td;
     }
 
-    public boolean deleteNode(Node<V> thisNode) { // keep trying
-        return deleteNode(thisNode, true);
-    }
-
-    private Node<V> getLiveForward(Node<V> refNode) {// aka listNext
-        Node<V> forwardNode = fixForward(refNode);
-        if (forwardNode.getNext() == null) return null;
-        return forwardNode;
-    }
-
-    public V popHead() {
-        while (true) {
-            Node<V> hn = getHead();
-            if (hn == null) {
-                return null;
-            }
-            if (deleteNode(hn, true)) {
-                return hn.getValue();
-            }
+    public Node<V> pushHead(V val) {
+        Pair<Boolean, Node<V>> done = new Pair<>(false, null);
+        while (!done.getFirst()) {
+            done = insertAfter(headDummy, val);
         }
+        return done.getSecond();
     }
 
-    public void pushHead(V val) {
-        boolean done = false;
-        while (!done) done = insertAfter(headDummy, val);
-    }
-
-    public V popTail() {
+    public Node<V> popTail() {
         while (true) {
             Node<V> tn = getTail();
             if (tn == null) return null;
-            if (deleteNode(tn, false)) return tn.getValue();
+            if (deleteNode(tn, false)) return tn;
         }
     }
 
-    public void pushTail(V val) {
-        boolean done = false;
-        while (!done) done = insertBefore(tailDummy, val);
+    public Node<V> getTail() {
+        return getLiveBack(tailDummy);
+    }
+
+    public boolean deleteNode(Node<V> thisNode) { // keep trying
+        if (thisNode == null)
+            return false;
+        return deleteNode(thisNode, true);
     }
 
     private Node<V> getLiveBack(Node<V> refNode) { // aka listPrevious
@@ -88,36 +76,14 @@ public class DoublyLinkedList<V> {
         }
     }
 
-    public Node<V> getTail() {
-        return getLiveBack(tailDummy);
-    }
-
-    public Node<V> getHead() {
-        return getLiveForward(headDummy);
-    }
-
-    public boolean insertAfter(Node<V> previous, V val) {
+    private Pair<Boolean, Node<V>> insertAfter(Node<V> previous, V val) {
         Node<V> myNode = new Node<>();
         myNode.setValue(val);
         while (true) {
             AtomicMarkableReference<Node<V>> prevAftRef = previous.getNext();
-            if (prevAftRef.isMarked()) return false;
+            if (prevAftRef.isMarked()) return new Pair<>(false, null);
             Node<V> prevAfter = fixForward(previous);
-            if (insertBetween(myNode, previous, prevAfter)) return
-                    true;
-        }
-    }
-
-    public boolean insertBefore(Node<V> following, V val) {
-        Node<V> myNode = new Node<>();
-        myNode.setValue(val);
-        while (true) {
-            AtomicMarkableReference<Node<V>> folAftRef = following.getNext();
-            if (folAftRef != null && folAftRef.isMarked()) return false;
-            Node<V> beforeFollowing = getBack(following);
-            if (beforeFollowing == null) return false;
-            if (insertBetween(myNode, beforeFollowing, following))
-                return true;
+            if (insertBetween(myNode, previous, prevAfter)) return new Pair<>(true, myNode);
         }
     }
 
