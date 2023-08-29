@@ -33,8 +33,8 @@ public class DiskManager {
         }
     }
 
-    public synchronized void readPage(long pageId, byte[] pageData) {
-        long offset = pageId * conf.getPageSize();
+    public synchronized void readPage(int pageId, byte[] pageData) {
+        long offset = 1l * pageId * conf.getPageSize();
         try {
             if (offset > dbFile.length()) {
                 LOGGER.error("can't read page with ID: ", pageId);
@@ -51,8 +51,8 @@ public class DiskManager {
 
     }
 
-    public synchronized void writePage(long pageId, byte[] pageData) {
-        long offset = pageId * conf.getPageSize();
+    public synchronized void writePage(int pageId, byte[] pageData) {
+        long offset = 1l * pageId * conf.getPageSize();
         try {
             dbFile.seek(offset);
             dbFile.write(pageData, 0, conf.getPageSize());

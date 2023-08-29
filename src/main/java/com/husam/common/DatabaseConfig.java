@@ -3,7 +3,8 @@ package com.husam.common;
 public class DatabaseConfig {
 
     private static final DatabaseConfig INSTANCE = new DatabaseConfig();
-    private int pageSize;
+    private int PAGE_SIZE = 4096;
+    private int INVALID_PAGE_ID = -1;
 
     private DatabaseConfig() {
         // Private constructor to prevent instantiation from outside
@@ -18,7 +19,11 @@ public class DatabaseConfig {
     }
 
     public int getPageSize() {
-        return pageSize;
+        return PAGE_SIZE;
+    }
+
+    public int getInvalidPageId() {
+        return INVALID_PAGE_ID;
     }
 
     public void save() {
