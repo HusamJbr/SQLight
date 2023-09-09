@@ -1,93 +1,143 @@
 package com.husam.cachemanager.replacers;
 
-import com.husam.utils.Pair;
+import com.husam.common.DatabaseConfig;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.util.concurrent.atomic.AtomicStampedReference;
+import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-public class ClockReplacer<T> implements Replacer<T> {
-    @Override
-    public Pair<Boolean, T> victim() {
-        return null;
+/**
+ * clock replacement algorithm
+ * that uses coarse grain locking, stability and predictability in DBMS is the most important
+ * a clock hand traverse (sweeps) the circular list and gives second chance to each entry
+ * when the entry get used it will mark it as used, so the hand will re-set it again
+ * at first all frames will be in the replacer, and to use a new frame you have to evict
+ * which will take o(1) at first till the replacer is full
+ */
+public class ClockReplacer implements Replacer {
+
+    private static final Logger LOGGER = LogManager.getLogger(ClockReplacer.class);
+    private static class Entry {
+        boolean isPinned;
+        boolean useBit;
+
+        Entry(boolean isPinned) {
+            this.useBit = isPinned;
+            this.isPinned = isPinned;
+        }
+    }
+    // we use array of objects to avoid allocating and deallocating objects in each pin and unpin
+    private final Entry[] clock;
+    private int size;
+    private final int numOfFrames;
+    private int hand;
+    private final Lock latch;
+
+    public ClockReplacer(int numOfFrames) {
+        this.clock = new Entry[numOfFrames];
+        this.size = numOfFrames;
+        this.numOfFrames = numOfFrames;
+        this.hand = 0;
+        this.latch = new ReentrantLock();
+        for(int i = 0; i < numOfFrames; i++) {
+            clock[i] = new Entry(false);
+        }
     }
 
     @Override
-    public void pin(T element) {
+    public int victim() {
+        latch.lock();
+        int chances = 0;
+        try {
+            while (true) {
+                chances++;
+                if(chances == size * 2) {
+                    return DatabaseConfig.getInstance().getInvalidFrameId();
+                }
+                hand = (hand + 1 % size);
+                Entry entry = clock[hand];
+                if (entry.isPinned){
+                    continue;
+                }
+                if(entry.useBit) {
+                    entry.useBit = false;
+                    continue;
+                }
+                return hand;
+            }
+        } finally {
+            latch.unlock();
+        }
+    }
 
+    private boolean isValidFrameId(int frameId) {
+        if(frameId < 0 || frameId >= size) {
+            LOGGER.fatal("asked to pin frameId that is invalid, the frameId = " + frameId);
+            return false;
+        }
+        return true;
+    }
+    @Override
+    public void pin(int frameId) {
+        assert isValidFrameId(frameId);
+        latch.lock();
+        try {
+            Entry entry = clock[frameId];
+            if(!entry.isPinned) {
+                entry.isPinned = true;
+                size--;
+            }
+            entry.useBit = true;
+        } finally {
+            latch.unlock();
+        }
     }
 
     @Override
-    public void unpin(T element) {
-
+    public void unpin(int frameId) {
+        assert isValidFrameId(frameId);
+        latch.lock();
+        try {
+            Entry entry = clock[frameId];
+            if(entry.isPinned) {
+                entry.isPinned = false;
+                size++;
+            }
+        } finally {
+            latch.unlock();
+        }
     }
+
+    @Override
+    public void remove(int frameId) {
+        assert isValidFrameId(frameId);
+        latch.lock();
+        try {
+            Entry entry = clock[frameId];
+            if(entry.isPinned) {
+                throw new RuntimeException("tried to remove a frame that is pinned, according to specification this error must be thrown");
+            }
+            // we pin the frame since it can't be evicted,
+            // the PBM will deal with it, and make it evictable when it uses the frame,
+            // for now the frame will be in the freeList in the BPM
+            entry.isPinned = true;
+            entry.useBit = false;
+            size--;
+        } finally {
+            latch.unlock();
+        }
+    }
+
 
     @Override
     public int size() {
-        return 0;
-    }
-
-    private static class Node<T> {
-        T item;
-        final AtomicStampedReference<Node<T>> next;
-        public Node(T x, Node<T> node) {
-            item = x;
-            next = new AtomicStampedReference<>(node, Integer.MIN_VALUE);
+        latch.lock();
+        try {
+            return size;
+        } finally {
+            latch.unlock();
         }
-    }
-    private static class ConcurrentQueue<T> {
-
-        // Pointer to sentinel node.  The first actual node is at head.getNext().
-        private final AtomicStampedReference<Node<T>> head = new AtomicStampedReference<>(new Node<>(null, null), Integer.MIN_VALUE);
-
-        // Pointer to last node on list
-        private final AtomicStampedReference<Node<T>> tail = new AtomicStampedReference<>(head.getReference(), Integer.MIN_VALUE);
-
-        public boolean enqueue(Node<T> node) {
-            for (;;) {
-                int[] curTailStamp = new int[1];
-                Node<T> curTail = tail.get(curTailStamp);
-                int[] curTailNextStamp = new int[1];
-                Node<T> tailNext = curTail.next.get(curTailNextStamp);
-                if (curTail == tail.getReference()) {
-                    // the tail is pointing to null as we want, we don't need to advance the tail
-                    // try inserting new node
-                    if (tailNext == null) {
-                        if (curTail.next.compareAndSet(null, node, curTailNextStamp[0], curTailNextStamp[0]+1)) {
-                            tail.compareAndSet(curTail, node, curTailStamp[0], curTailStamp[0]+1);
-                            return true;
-                        }
-                    } else { // it fails the tail is pointing one step before, we have to advance the tail
-                        tail.compareAndSet(curTail, tailNext, curTailStamp[0], curTailStamp[0]+1);
-                    }
-                }
-            }
-        }
-
-        public Node<T> dequeue() {
-            for (;;) {
-                int[] curHeadStamp = new int[1];
-                Node<T> curHead = head.get(curHeadStamp);
-                int[] curTailStamp = new int[1];
-                Node<T> curTail = tail.get(curTailStamp);
-                int[] headNextStamp = new int[1];
-                Node<T> headNext = curHead.next.get(headNextStamp);
-                if (curHead == head.getReference()) {
-                    if (curHead == curTail) {
-                        if (headNext == null) {
-                            return null;
-                        }
-                        tail.compareAndSet(curTail, headNext, curTailStamp[0], curTailStamp[0]+1);
-                    } else {
-                        // the first node is sentinel, so we need to move the data from the next node to the first sentinel node
-                        // we then make the next node the new sentinel, and we return the old sentinel that contains the needed data
-                        T resultItem = headNext.item;
-                        if(head.compareAndSet(curHead, headNext, curHeadStamp[0], curHeadStamp[0]+2)) {
-                            curHead.item = resultItem;
-                            return curHead;
-                        }
-                    }
-                }
-            }
-        }
-
     }
 }

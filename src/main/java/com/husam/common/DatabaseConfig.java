@@ -1,10 +1,13 @@
 package com.husam.common;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class DatabaseConfig {
 
     private static final DatabaseConfig INSTANCE = new DatabaseConfig();
-    private int PAGE_SIZE = 4096;
-    private int INVALID_PAGE_ID = -1;
+    private int pageSize = 4096;
+    private int invalidPageId = -1;
+    private int invalidFrameId = -1;
 
     private DatabaseConfig() {
         // Private constructor to prevent instantiation from outside
@@ -19,11 +22,15 @@ public class DatabaseConfig {
     }
 
     public int getPageSize() {
-        return PAGE_SIZE;
+        return pageSize;
     }
 
     public int getInvalidPageId() {
-        return INVALID_PAGE_ID;
+        return invalidPageId;
+    }
+
+    public int getInvalidFrameId() {
+        return invalidFrameId;
     }
 
     public void save() {
