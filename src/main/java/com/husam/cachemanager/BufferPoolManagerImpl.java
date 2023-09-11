@@ -58,7 +58,8 @@ public class BufferPoolManagerImpl implements BufferPoolManager {
         this.freeFramesQueue = new LinkedList<>();
         latch = new ReentrantLock();
         for(int i = 0; i < poolSize; i++) {
-            pages[i] = new Page();
+            this.pages[i] = new Page();
+            this.freeFramesQueue.offer(i);
         }
     }
 
@@ -123,7 +124,7 @@ public class BufferPoolManagerImpl implements BufferPoolManager {
         latch.lock();
         try {
             Integer frameId = pageTable.get(pageId);
-            if(frameId != DatabaseConfig.getInstance().getInvalidFrameId()) {
+            if(frameId != null) {
                 pages[frameId].incrementPinCount();
                 replacer.pin(frameId);
                 return pages[frameId];
@@ -223,6 +224,7 @@ public class BufferPoolManagerImpl implements BufferPoolManager {
         if(oldPage.isDirty()) {
             doFlushPage(oldPage);
         }
+        pageTable.remove(oldPage.getPageId());
         oldPage.resetMemory();
         assert oldPage.getPinCount() == 0; // the pin count must be zero its victim
         return frameId;

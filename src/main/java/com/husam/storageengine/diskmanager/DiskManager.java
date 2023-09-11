@@ -63,4 +63,12 @@ public class DiskManager {
             throw new RuntimeException(e);
         }
     }
+
+    public synchronized void shutDown() {
+        try {
+            dbFile.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

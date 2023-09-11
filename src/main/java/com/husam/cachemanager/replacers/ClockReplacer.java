@@ -53,10 +53,10 @@ public class ClockReplacer implements Replacer {
         try {
             while (true) {
                 chances++;
-                if(chances == size * 2) {
+                if(chances == numOfFrames * 2) {
                     return DatabaseConfig.getInstance().getInvalidFrameId();
                 }
-                hand = (hand + 1 % size);
+                hand = ((hand + 1) % numOfFrames);
                 Entry entry = clock[hand];
                 if (entry.isPinned){
                     continue;
@@ -73,7 +73,7 @@ public class ClockReplacer implements Replacer {
     }
 
     private boolean isValidFrameId(int frameId) {
-        if(frameId < 0 || frameId >= size) {
+        if(frameId < 0 || frameId >= numOfFrames) {
             LOGGER.fatal("asked to pin frameId that is invalid, the frameId = " + frameId);
             return false;
         }

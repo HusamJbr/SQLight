@@ -65,7 +65,7 @@ public class Page {
     }
 
     public void decrementPinCount() {
-        this.pinCount++;
+        this.pinCount--;
     }
 
     /** @return true if the page in memory has been modified from the page on disk, false otherwise */
