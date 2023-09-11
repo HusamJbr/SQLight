@@ -20,10 +20,12 @@ public class ClockReplacer implements Replacer {
 
     private static final Logger LOGGER = LogManager.getLogger(ClockReplacer.class);
     private static class Entry {
+        boolean isValid;
         boolean isPinned;
         boolean useBit;
 
-        Entry(boolean isPinned) {
+        Entry(boolean isValid, boolean isPinned) {
+            this.isValid = isValid;
             this.useBit = isPinned;
             this.isPinned = isPinned;
         }
@@ -37,12 +39,12 @@ public class ClockReplacer implements Replacer {
 
     public ClockReplacer(int numOfFrames) {
         this.clock = new Entry[numOfFrames];
-        this.size = numOfFrames;
+        this.size = 0;
         this.numOfFrames = numOfFrames;
         this.hand = 0;
         this.latch = new ReentrantLock();
         for(int i = 0; i < numOfFrames; i++) {
-            clock[i] = new Entry(false);
+            clock[i] = new Entry(false, true);
         }
     }
 
@@ -58,13 +60,16 @@ public class ClockReplacer implements Replacer {
                 }
                 hand = ((hand + 1) % numOfFrames);
                 Entry entry = clock[hand];
-                if (entry.isPinned){
+                if (entry.isPinned || !entry.isValid){
                     continue;
                 }
                 if(entry.useBit) {
                     entry.useBit = false;
                     continue;
                 }
+                entry.isValid = false;
+                entry.isPinned = true; // useBit is already false
+                size--;
                 return hand;
             }
         } finally {
@@ -85,6 +90,9 @@ public class ClockReplacer implements Replacer {
         latch.lock();
         try {
             Entry entry = clock[frameId];
+            if(!entry.isValid) {
+                return;
+            }
             if(!entry.isPinned) {
                 entry.isPinned = true;
                 size--;
@@ -101,6 +109,7 @@ public class ClockReplacer implements Replacer {
         latch.lock();
         try {
             Entry entry = clock[frameId];
+            entry.isValid = true;
             if(entry.isPinned) {
                 entry.isPinned = false;
                 size++;
@@ -116,12 +125,10 @@ public class ClockReplacer implements Replacer {
         latch.lock();
         try {
             Entry entry = clock[frameId];
-            if(entry.isPinned) {
-                throw new RuntimeException("tried to remove a frame that is pinned, according to specification this error must be thrown");
+            if(!entry.isValid) {
+                throw new RuntimeException("tried to remove a frame that is already removed, according to specification this error must be thrown");
             }
-            // we pin the frame since it can't be evicted,
-            // the PBM will deal with it, and make it evictable when it uses the frame,
-            // for now the frame will be in the freeList in the BPM
+            entry.isValid = false;
             entry.isPinned = true;
             entry.useBit = false;
             size--;
